@@ -16,7 +16,6 @@ def health():
     return jsonify({"status": "ok", "service": "user-service"}), 200
 
 
-@app.route("", methods=["GET"])
 @app.route("/", methods=["GET"])
 def list_users():
     conn = get_conn()
@@ -29,7 +28,6 @@ def list_users():
         conn.close()
 
 
-@app.route("", methods=["POST"])
 @app.route("/", methods=["POST"])
 def create_user():
     data = request.get_json(force=True)

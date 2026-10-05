@@ -27,7 +27,6 @@ def health():
     return jsonify({"status": "ok", "service": "order-service"}), 200
 
 
-@app.route("", methods=["POST"])
 @app.route("/", methods=["POST"])
 def create_order():
     data = request.get_json(force=True)
@@ -86,7 +85,6 @@ def create_order():
     return jsonify(order_serializable), 201
 
 
-@app.route("", methods=["GET"])
 @app.route("/", methods=["GET"])
 def list_orders():
     cached = r.get("orders:all")

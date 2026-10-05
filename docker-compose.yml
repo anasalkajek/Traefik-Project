@@ -1,0 +1,131 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: appuser
+      POSTGRES_PASSWORD: labpassword
+      POSTGRES_DB: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U appuser -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+  user-service:
+    build: ./user-service
+    environment:
+      DATABASE_URL: postgresql://appuser:labpassword@postgres:5432/users_db
+      PORT: "5000"
+    networks:
+      - web
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.users.rule=PathPrefix(`/api/users`)"
+      - "traefik.http.routers.users.entrypoints=web"
+      - "traefik.http.routers.users.middlewares=users-strip"
+      - "traefik.http.middlewares.users-strip.stripprefix.prefixes=/api/users"
+      - "traefik.http.services.users.loadbalancer.server.port=5000"
+    restart: unless-stopped
+  product-service:
+    build: ./product-service
+    environment:
+      DATABASE_URL: postgresql://appuser:labpassword@postgres:5432/products_db
+      PORT: "5001"
+    networks:
+      - web
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.products.rule=PathPrefix(`/api/products`)"
+      - "traefik.http.routers.products.entrypoints=web"
+      - "traefik.http.routers.products.middlewares=products-strip"
+      - "traefik.http.middlewares.products-strip.stripprefix.prefixes=/api/products"
+      - "traefik.http.services.products.loadbalancer.server.port=5001"
+    restart: unless-stopped
+  order-service:
+    build: ./order-service
+    environment:
+      DATABASE_URL: postgresql://appuser:labpassword@postgres:5432/orders_db
+      PORT: "5002"
+      REDIS_URL: redis://redis:6379/0
+      USER_SERVICE_URL: http://user-service:5000
+      PRODUCT_SERVICE_URL: http://product-service:5001
+    networks:
+      - web
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      user-service:
+        condition: service_started
+      product-service:
+        condition: service_started
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.orders.rule=PathPrefix(`/api/orders`)"
+      - "traefik.http.routers.orders.entrypoints=web"
+      - "traefik.http.routers.orders.middlewares=orders-strip"
+      - "traefik.http.middlewares.orders-strip.stripprefix.prefixes=/api/orders"
+      - "traefik.http.services.orders.loadbalancer.server.port=5002"
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    networks:
+      - web
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.frontend.entrypoints=web"
+      - "traefik.http.routers.frontend.priority=1"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+    restart: unless-stopped
+  traefik:
+    image: traefik:v3.6
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.network=traefik-web"
+      - "--entrypoints.web.address=:80"
+      - "--accesslog=true"
+      - "--log.level=INFO"
+    ports:
+      - "80:80"
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - web
+    restart: unless-stopped
+networks:
+  web:
+    name: traefik-web
+  backend:
+
+volumes:
+  postgres_data:

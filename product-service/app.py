@@ -16,7 +16,6 @@ def health():
     return jsonify({"status": "ok", "service": "product-service"}), 200
 
 
-@app.route("", methods=["GET"])
 @app.route("/", methods=["GET"])
 def list_products():
     conn = get_conn()
@@ -29,7 +28,6 @@ def list_products():
         conn.close()
 
 
-@app.route("", methods=["POST"])
 @app.route("/", methods=["POST"])
 def create_product():
     data = request.get_json(force=True)
